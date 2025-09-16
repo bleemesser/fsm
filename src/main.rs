@@ -121,7 +121,6 @@ fn load_dfa(path: &Path) -> Result<DFA> {
 
 /// Helper function to run the visualization logic.
 fn run_viz(dfa: &DFA, file_path: &Path) -> Result<()> {
-    println!("--- Transition Table for {} ---", dfa.name);
     dfa.print_transition_table();
 
     let dot_filename = file_path.with_extension("dot");
