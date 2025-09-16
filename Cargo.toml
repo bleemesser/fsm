@@ -1,0 +1,12 @@
+[package]
+name = "fsm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.99"
+bimap = "0.6.3"
+clap = { version = "4.5.47", features = ["derive"] }
+rustyline = "17.0.1"
+serde = { version = "1.0.225", features = ["derive"] }
+serde_yaml = "0.9.34"
