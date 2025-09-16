@@ -3,11 +3,10 @@ use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::Write;
-use std::path::Path; // Import Path
+use std::path::Path;
 
 /// Generates a Graphviz DOT file representation of the DFA.
 pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
-    // Create the output file
     let mut file = File::create(filename)?;
 
     writeln!(
