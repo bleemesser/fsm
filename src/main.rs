@@ -52,10 +52,9 @@ fn run_cli() -> Result<()> {
             match readline {
                 Ok(line) => {
                     let input = line.trim();
-                    if input.is_empty() {
-                        continue;
+                    if !input.is_empty() {
+                        rl.add_history_entry(input)?;
                     }
-                    rl.add_history_entry(input)?;
 
                     match input {
                         "exit" | "quit" => break,
