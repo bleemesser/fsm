@@ -1,8 +1,14 @@
 use crate::dfa::{DFA, StateInfo};
 use anyhow::Result;
 use bimap::BiMap;
-use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use serde::{
+    Deserialize, Deserializer,
+    de::{self, MapAccess, Visitor},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 #[derive(Deserialize, Debug)]
 struct YamlDFA {
@@ -21,11 +27,50 @@ struct YamlStateProps {
     label: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum YamlSymbolSpecifier {
-    Map(YamlRangeMap),
     Literal(String),
+    Map(YamlRangeMap),
+}
+
+// for some reason the default Deserialize implementation doesn't work here
+// so i'm using a manual implementation. the exact problem was that except + a list was being
+// interpreted as a range map with a start but no end, which was erroring.
+impl<'de> Deserialize<'de> for YamlSymbolSpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct YamlSymbolSpecifierVisitor;
+
+        impl<'de> Visitor<'de> for YamlSymbolSpecifierVisitor {
+            type Value = YamlSymbolSpecifier;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "a string literal (e.g., 'a') or a range map (e.g., { crange: 'a..z' })",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(YamlSymbolSpecifier::Literal(value.to_string()))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let range_map =
+                    YamlRangeMap::deserialize(de::value::MapAccessDeserializer::new(map))?;
+                Ok(YamlSymbolSpecifier::Map(range_map))
+            }
+        }
+
+        deserializer.deserialize_any(YamlSymbolSpecifierVisitor)
+    }
 }
 
 impl YamlSymbolSpecifier {
