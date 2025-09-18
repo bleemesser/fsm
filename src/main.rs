@@ -17,10 +17,13 @@ struct Args {
     #[arg(required = true)]
     file: PathBuf,
 
-    /// Run in visualization mode.
-    /// This will print the transition table and generate a .dot file.
+    /// Generate a Graphviz DOT file for visualization.
     #[arg(long)]
     viz: bool,
+
+    /// Print the transition table to the console.
+    #[arg(long)]
+    table: bool,
 }
 
 fn main() {
@@ -36,7 +39,9 @@ fn run_cli() -> Result<()> {
     let mut dfa = load_dfa(&args.file)?;
     let mut current_path = args.file.clone();
 
-    if args.viz {
+    if args.table {
+        dfa.print_transition_table();
+    } else if args.viz {
         run_viz(&dfa, &current_path)?;
     } else {
         println!(
@@ -85,7 +90,10 @@ fn run_cli() -> Result<()> {
                             }
                         }
                         _ => {
+                            let start_time = std::time::Instant::now();
                             let accepted = dfa.run(input);
+                            let duration = start_time.elapsed();
+                            println!("Processed in: {:.2?}", duration);
                             println!("{}", if accepted { "ACCEPT" } else { "REJECT" });
                         }
                     }
@@ -120,8 +128,6 @@ fn load_dfa(path: &Path) -> Result<DFA> {
 
 /// Helper function to run the visualization logic.
 fn run_viz(dfa: &DFA, file_path: &Path) -> Result<()> {
-    dfa.print_transition_table();
-
     let dot_filename = file_path.with_extension("dot");
     let dot_str = dot_filename.to_str().unwrap_or("dfa.dot");
 

@@ -55,6 +55,10 @@ impl DFA {
         let alphabet_size = self.alphabet.len();
         let mut alphabet_header: Vec<char> = vec![' '; alphabet_size];
         for (c, &idx) in self.alphabet.iter() {
+            if c == &' ' {
+                alphabet_header[idx] = '␣'; // Use a special symbol for space
+            } else
+
             if idx < alphabet_header.len() {
                 alphabet_header[idx] = *c;
             }

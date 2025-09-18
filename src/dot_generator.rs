@@ -126,6 +126,9 @@ fn format_char(c: char) -> String {
     match c {
         '"' => "\\\"".to_string(),
         '\\' => "\\\\".to_string(),
+        ' ' => "␣".to_string(),
+        ',' => "[comma]".to_string(),
+        '-' => "[dash]".to_string(),
         _ => c.to_string(),
     }
 }
