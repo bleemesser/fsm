@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use anyhow::Result;
 use bimap::BiMap;
 
@@ -20,9 +18,11 @@ pub struct DFA {
     pub state_keys: BiMap<String, usize>, // state key <-> state index
 
     pub start_state_idx: usize,
-    pub accept_state_indices: BTreeSet<usize>,
+    // [state1_is_accept, state2_is_accept, ...]
+    pub accept_states: Vec<bool>,
 
-    pub transition_table: Vec<Vec<usize>>, // state_idx x alphabet_idx -> state_idx
+    // (state_idx * alphabet_len) + alphabet_idx -> next_state_idx
+    pub transition_table: Vec<usize>,
 
     pub state_properties: Vec<StateInfo>, // index -> state properties
 }
@@ -34,18 +34,49 @@ impl DFA {
     }
 
     /// Runs the DFA on the given input string and returns true if accepted, false otherwise.
-    pub fn run(&self, input: &str) -> bool {
+    pub fn run<I>(&self, input: I) -> bool 
+    where
+        I: IntoIterator<Item = char>,
+    {
         let mut current_state = self.start_state_idx;
 
-        for c in input.chars() {
-            if let Some(&alphabet_idx) = self.alphabet.get_by_left(&c) {
-                current_state = self.transition_table[current_state][alphabet_idx];
+        let alphabet_size = self.alphabet.len();
+
+        let mut prev_char: char;
+        let mut prev_index: usize;
+        let mut iter = input.into_iter();
+
+        // handle the first character separately to avoid using Option in the loop
+        if let Some(c) = iter.next() {
+            if let Some(&idx) = self.alphabet.get_by_left(&c) {
+                prev_char = c;
+                prev_index = idx;
+                current_state = self.transition_table[(current_state * alphabet_size) + idx];
             } else {
                 return false;
             }
+        } else {
+            return self.accept_states[current_state];
         }
 
-        self.accept_state_indices.contains(&current_state)
+        // handle remaining characters
+        for c in iter {
+            let alphabet_idx = if c == prev_char {
+                prev_index
+            } else {
+                if let Some(&idx) = self.alphabet.get_by_left(&c) {
+                    prev_char = c;
+                    prev_index = idx;
+                    idx
+                } else {
+                    return false;
+                }
+            };
+
+            current_state = self.transition_table[(current_state * alphabet_size) + alphabet_idx];
+        }
+
+        self.accept_states[current_state]
     }
 
     /// Prints a human-readable representation of the DFA's transition table.
@@ -76,7 +107,7 @@ impl DFA {
         println!();
 
         // Print Rows
-        for (src_idx, row) in self.transition_table.iter().enumerate() {
+        for src_idx in 0..self.state_keys.len() {
             let prefix = if src_idx == self.start_state_idx {
                 "--> "
             } else {
@@ -99,7 +130,7 @@ impl DFA {
             let state_display = format!(
                 "{}{}",
                 trunc_key,
-                if self.accept_state_indices.contains(&src_idx) {
+                if self.accept_states[src_idx] {
                     "*"
                 } else {
                     ""
@@ -108,7 +139,10 @@ impl DFA {
 
             print!("{:<STATE_COL_WIDTH$}", state_display);
 
-            for &dest_idx in row {
+            for alpha_idx in 0..alphabet_size {
+                let dest_idx =
+                    self.transition_table[(src_idx * alphabet_size) + alpha_idx];
+
                 let dest_key = self
                     .state_keys
                     .get_by_right(&dest_idx)

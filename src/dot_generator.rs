@@ -30,7 +30,7 @@ pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
     for (idx, props) in fsm.state_properties.iter().enumerate() {
         let state_key = fsm.state_keys.get_by_right(&idx).unwrap();
 
-        let shape = if fsm.accept_state_indices.contains(&idx) {
+        let shape = if fsm.accept_states[idx] {
             "doublecircle"
         } else {
             "circle"
@@ -59,11 +59,18 @@ pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
     )?;
 
     let mut transitions: BTreeMap<(usize, usize), BTreeSet<char>> = BTreeMap::new();
-    for (src_idx, row) in fsm.transition_table.iter().enumerate() {
-        for (alpha_idx, dest_idx) in row.iter().enumerate() {
+
+    // transition table is now a 1d vec of size (num_states * alphabet_size)
+    let alphabet_size = fsm.alphabet.len();
+    for (src_idx, row) in fsm
+        .transition_table
+        .chunks(alphabet_size)
+        .enumerate()
+    {
+        for (alpha_idx, &dest_idx) in row.iter().enumerate() {
             let c = fsm.alphabet.get_by_right(&alpha_idx).unwrap();
             transitions
-                .entry((src_idx, *dest_idx))
+                .entry((src_idx, dest_idx))
                 .or_default()
                 .insert(*c);
         }

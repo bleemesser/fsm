@@ -243,16 +243,7 @@ pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
         &alphabet_bimap,
     )?;
 
-    let accept_state_indices = state_bimap
-        .iter()
-        .filter_map(|(k, &v)| {
-            if yaml_dfa.states.get(k).map_or(false, |props| props.accept) {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let accept_states = state_infos.iter().map(|info| info.accept).collect();
 
     let dfa = DFA {
         name: yaml_dfa.name,
@@ -260,7 +251,7 @@ pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
         alphabet: alphabet_bimap,
         state_keys: state_bimap,
         start_state_idx: start_state_index,
-        accept_state_indices,
+        accept_states,
         transition_table,
         state_properties: state_infos,
     };
@@ -297,11 +288,11 @@ fn read_transitions(
     transitions: BTreeMap<String, Vec<YamlTransitionMapping>>,
     full_alphabet_set: &BTreeSet<char>,
     alphabet_bimap: &BiMap<char, usize>,
-) -> Result<Vec<Vec<usize>>> {
+) -> Result<Vec<usize>> {
     let state_count = state_bimap.len();
     let alphabet_size = alphabet_bimap.len();
 
-    let mut transition_table = vec![vec![None; alphabet_size]; state_count];
+    let mut transition_table = vec![None; state_count * alphabet_size];
 
     for (src_state_key, mappings) in transitions {
         let src_idx = get_state_idx(state_bimap, &src_state_key)?;
@@ -314,7 +305,9 @@ fn read_transitions(
             for c in on_chars {
                 let alpha_idx = get_alphabet_idx(alphabet_bimap, c)?;
 
-                match transition_table[src_idx][alpha_idx] {
+                let table_idx = src_idx * alphabet_size + alpha_idx;
+
+                match transition_table[table_idx] {
                     Some(existing_dest_idx) => {
                         if existing_dest_idx != dest_idx {
                             // AMBIGUITY ERROR
@@ -334,7 +327,7 @@ fn read_transitions(
                         }
                     }
                     None => {
-                        transition_table[src_idx][alpha_idx] = Some(dest_idx);
+                        transition_table[table_idx] = Some(dest_idx);
                     }
                 }
             }
@@ -344,27 +337,25 @@ fn read_transitions(
     let final_table = transition_table
         .into_iter()
         .enumerate()
-        .map(|(src_idx, row)| {
-            row.into_iter()
-                .enumerate()
-                .map(|(alpha_idx, dest_opt)| {
-                    dest_opt.ok_or_else(|| {
-                        // TOTALITY ERROR: This (state, symbol) pair was never defined.
-                        let err_state = "ERR_STATE".to_string();
-                        let src_key = state_bimap.get_by_right(&src_idx).unwrap_or(&err_state);
-                        let symbol = alphabet_bimap.get_by_right(&alpha_idx).unwrap_or(&'?');
+        .map(|(table_idx, dest_opt)| {
+            dest_opt.ok_or_else(|| {
+                // TOTALITY ERROR: This (state, symbol) pair was never defined.
+                let src_idx = table_idx / alphabet_size;
+                let alpha_idx = table_idx % alphabet_size;
 
-                        anyhow::anyhow!(
-                            "Incomplete transitions for state '{}': \
-                             no transition defined for symbol '{}'",
-                            src_key,
-                            symbol
-                        )
-                    })
-                })
-                .collect::<Result<Vec<usize>>>()
+                let err_state = "ERR_STATE".to_string();
+                let src_key = state_bimap.get_by_right(&src_idx).unwrap_or(&err_state);
+                let symbol = alphabet_bimap.get_by_right(&alpha_idx).unwrap_or(&'?');
+
+                anyhow::anyhow!(
+                    "Incomplete transitions for state '{}': \
+                     no transition defined for symbol '{}'",
+                    src_key,
+                    symbol
+                )
+            })
         })
-        .collect::<Result<Vec<Vec<usize>>>>()?;
+        .collect::<Result<Vec<usize>>>()?;
 
     Ok(final_table)
 }
