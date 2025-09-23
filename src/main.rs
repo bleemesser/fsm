@@ -93,8 +93,7 @@ fn run_cli() -> Result<()> {
                             let start_time = std::time::Instant::now();
                             let accepted = dfa.run(input.chars());
                             let duration = start_time.elapsed();
-                            println!("Processed in: {:.2?}", duration);
-                            println!("{}", if accepted { "ACCEPT" } else { "REJECT" });
+                            println!("{} | Processed in: {:.2?}", if accepted { "ACCEPT" } else { "REJECT" }, duration);
                         }
                     }
                 }
@@ -125,37 +124,37 @@ fn load_dfa(path: &Path) -> Result<DFA> {
     file.read_to_string(&mut contents)?;
     let dfa = DFA::from_yaml(&contents)?;
 
-    let runs = 10;
-    let mut total_time_ns = 0u128;
+    // let runs = 10;
+    // let mut total_time_ns = 0u128;
 
-    let correct_value = true;
-    let test_input = "a".chars().cycle().take(1_000_000_000);
+    // let correct_value = true;
+    // let test_input = "a".chars().cycle().take(1_000_000_000);
     
-    for i in 0..runs {
-        let input = test_input.clone();
-        let start_time = std::time::Instant::now();
+    // for i in 0..runs {
+    //     let input = test_input.clone();
+    //     let start_time = std::time::Instant::now();
         
-        let accepted = dfa.run(input);
-        let duration = start_time.elapsed();
+    //     let accepted = dfa.run(input);
+    //     let duration = start_time.elapsed();
 
-        if accepted != correct_value {
-            println!(
-                "Warning: Test input returned {}, expected {}",
-                if accepted { "ACCEPT" } else { "REJECT" },
-                if correct_value { "ACCEPT" } else { "REJECT" }
-            );
-        }
-        println!("Run {} of {} completed in: {:.2?}", i + 1, runs, duration);
-        total_time_ns += duration.as_nanos();
-    }
-    let avg_time_ns = total_time_ns as f64 / runs as f64;
+    //     if accepted != correct_value {
+    //         println!(
+    //             "Warning: Test input returned {}, expected {}",
+    //             if accepted { "ACCEPT" } else { "REJECT" },
+    //             if correct_value { "ACCEPT" } else { "REJECT" }
+    //         );
+    //     }
+    //     println!("Run {} of {} completed in: {:.2?}", i + 1, runs, duration);
+    //     total_time_ns += duration.as_nanos();
+    // }
+    // let avg_time_ns = total_time_ns as f64 / runs as f64;
 
-    println!(
-        "Benchmark: {} (Average over {} runs: {:.2} ms)",
-        if dfa.run(test_input) { "ACCEPT" } else { "REJECT" },
-        runs,
-        avg_time_ns / 1_000_000.0
-    );
+    // println!(
+    //     "Benchmark: {} (Average over {} runs: {:.2} ms)",
+    //     if dfa.run(test_input) { "ACCEPT" } else { "REJECT" },
+    //     runs,
+    //     avg_time_ns / 1_000_000.0
+    // );
 
     Ok(dfa)
 }

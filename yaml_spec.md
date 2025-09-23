@@ -1,7 +1,7 @@
-# YAML Specification for Defining a DFA (DFA-YAML Spec)
+# YAML Specification for Defining Finite State Machines (FSM-YAML Spec)
 
-**Version:** 1.0
-**Date:** 2025-09-10
+**Version:** 1.1
+**Date:** 2025-09-23
 
 ## 1. Introduction
 
@@ -9,27 +9,30 @@ This document specifies a human-readable YAML format for defining a Deterministi
 
 A DFA is formally defined by a 5-tuple $(Q, \Sigma, \delta, q_0, F)$, where:
 
--   **$Q$** is a finite set of states.
--   **$\Sigma$** is a finite set of input symbols called the alphabet.
--   **$\delta$** is the transition function: $\delta: Q \times \Sigma \to Q$. This function must be total (defined for every state-symbol pair).
--   **$q_0$** is the start state.
--   **$F$** is the set of accept states.
+  - **$Q$** is a finite set of states.
+  - **$\Sigma$** is a finite set of input symbols called the alphabet.
+  - **$\delta$** is the transition function: $\delta: Q \times \Sigma \to Q$. This function must be total (defined for every state-symbol pair).
+  - **$q_0$** is the start state.
+  - **$F$** is the set of accept states.
 
-This specification maps each component of the 5-tuple to a corresponding YAML structure.
+An NFA extends this definition by allowing for any number of next states on a given input symbol (including 0), and for epsilon transitions on an empty string. Any NFA can be converted to an equivalent DFA via subset construction, which should be handled in the parsing step.
+
+This specification maps each component of the FSM to a corresponding YAML structure.
 
 ## 2. Top-Level Structure
 
-A DFA document is a YAML mapping that must contain the following top-level keys: `name`, `states`, `alphabet`, `start_state`, and `transitions`. An optional `description` key is also supported.
+A FSM document is a YAML mapping that must contain the following top-level keys: `name`, `states`, `alphabet`, `start_state`, and `transitions`. Optional `description` and `dfa` keys are also supported.
 
 ```yaml
 # Top-level structure
-name: UniqueNameForDFA
-description: (Optional) A brief explanation of what this DFA does.
+name: UniqueName
+dfa: true # (Optional) Defaults to false. If true, enforce DFA rules.
+description: # (Optional) A brief explanation of what this FSM does.
 states: ...
 alphabet: ...
 start_state: ...
 transitions: ...
-````
+```
 
 ## 3. Field Specifications
 
@@ -37,36 +40,44 @@ transitions: ...
 
   - **Type:** String
   - **Cardinality:** Required, 1
-  - **Description:** A unique identifier for the DFA.
+  - **Description:** A unique identifier for the FSM.
 
-### 3.2. description
+### 3.2. dfa
+
+  - **Type:** Boolean
+  - **Cardinality:** Optional, 0..1
+  - **Description:** Specifies the type of automaton.
+      - If `true`, the parser will enforce strict DFA rules: transition totality and lack of ambiguity. The `epsilon` keyword in transitions is disallowed.
+      - If `false` or omitted, the automaton is treated as an NFA. The parser will automatically convert it to an equivalent DFA using the subset construction algorithm.
+
+### 3.3. description
 
   - **Type:** String
   - **Cardinality:** Optional, 0..1
-  - **Description:** A human-readable description of the DFA's purpose.
+  - **Description:** A human-readable description of the FSM's purpose.
 
-### 3.3. states
+### 3.4. states
 
   - **Type:** Mapping
   - **Cardinality:** Required, 1
   - **Description:** Defines the finite set of states ($Q$) and which of them are accept states ($F$).
 
-The keys of the `states` map are the friendly unique state identifiers. They can be any valid string, but should typically be more concise than the labels.
+  The keys of the `states` map are the friendly unique state identifiers. They can be any valid string, but should typically be more concise than the labels.
 
-The value for each state key is a nested map containing properties for that state.
+  The value for each state key is a nested map containing properties for that state.
 
 #### State Properties:
 
   - **`accept`**: Boolean, Optional (defaults to `false`). If `true`, the state is an accepting state.
   - **`label`**: String, Optional. A human-readable label.
 
-### 3.4. start_state
+### 3.5. start_state
 
   - **Type:** String
   - **Cardinality:** Required, 1
   - **Description:** Defines the start state ($q_0$). Must be a key from the `states` map.
 
-### 3.5. alphabet
+### 3.6. alphabet
 
   - **Type:** Sequence of Symbol Specifiers (see Appendix A)
   - **Cardinality:** Required, 1
@@ -81,7 +92,7 @@ alphabet:
   - '-'               # Defines the symbol -
 ```
 
-### 3.6. transitions
+### 3.7. transitions
 
   - **Type:** Mapping
   - **Cardinality:** Required, 1
@@ -94,7 +105,7 @@ The keys of the `transitions` map are the source state identifiers. The value fo
 1.  **No Ambiguity:** The symbol sets defined for each destination state must be disjoint. An input symbol cannot lead to more than one destination.
 2.  **Totality:** The union of all symbol sets for all destinations must equal the entire alphabet ($\Sigma$).
 
-#### 3.6.1. Transition Mapping Structure
+#### 3.7.1. Transition Mapping Structure
 
 Each item in the sequence is a mapping that groups all transitions from a source to a single destination. It must contain two keys: `to` and `on`.
 
@@ -103,9 +114,10 @@ Each item in the sequence is a mapping that groups all transitions from a source
       - A single Symbol Specifier (see Appendix A).
       - A Sequence of Symbol Specifiers. The resulting set is the union of all symbols defined.
       - The special keyword `alphabet`, representing all symbols in $\Sigma$.
+      - The special keyword `epsilon`, for an epsilon transition (only allowed if `dfa` is `false`).
       - An `except` mapping, whose value can be a single Symbol Specifier or a Sequence of Symbol Specifiers. This matches all symbols in $\Sigma$ not in the set defined by the `except` value.
 
-#### 3.6.2. Example
+#### 3.7.2. Example
 
 Consider a DFA that recognizes simple integers (e.g., `123`, `+45`, `-6`). The alphabet is defined as `[ {nrange: '0..9'}, '+', '-' ]`.
 
@@ -143,10 +155,10 @@ This specification uses a consistent notation to define sets of characters, both
 
 A Symbol Specifier can be one of the following:
 
-  - **Literal**: A single character or number.  
+  - **Literal**: A single character or number.
     *Example:* `'a'`, `_`, `5`
 
-  - **String**: A string of characters. This is syntactic sugar for a sequence of its constituent character literals. A parser should treat `'abc'` as `['a', 'b', 'c']`.  
+  - **String**: A string of characters. This is syntactic sugar for a sequence of its constituent character literals. A parser should treat `'abc'` as `['a', 'b', 'c']`.
     *Example:* `'xyz'`
 
   - **Range Mapping**: A mapping that defines an inclusive range of characters or numbers.
