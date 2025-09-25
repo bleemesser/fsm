@@ -94,10 +94,10 @@ impl DFA {
                 alphabet_header[idx] = *c;
             }
         }
-
+        const CHARS_FOR_KEY: usize = 12;
         const PREFIX_WIDTH: usize = 4; // "--> " or "    "
-        const STATE_COL_WIDTH: usize = 10; // 8 chars for key + 1 for '*' + 1 space
-        const CELL_WIDTH: usize = 9; // 8 chars for key + 1 space
+        const STATE_COL_WIDTH: usize = CHARS_FOR_KEY + 2; // chars for key + 1 for '*' + 1 space
+        const CELL_WIDTH: usize = CHARS_FOR_KEY + 1; // chars for key + 1 space
 
         print!("{:<PREFIX_WIDTH$}", ""); // padding for the prefix column
         print!("{:<STATE_COL_WIDTH$}", "STATE");
@@ -120,9 +120,9 @@ impl DFA {
                 .get_by_right(&src_idx)
                 .map_or("ERR", |s| s.as_str());
 
-            // truncate state key to 8 characters
-            let trunc_key = if state_key.len() > 8 {
-                &state_key[..8]
+            // truncate state key
+            let trunc_key = if state_key.len() > CHARS_FOR_KEY {
+                &state_key[..CHARS_FOR_KEY]
             } else {
                 state_key
             };
@@ -147,9 +147,9 @@ impl DFA {
                     .state_keys
                     .get_by_right(&dest_idx)
                     .map_or("ERR", |s| s.as_str());
-                // truncate dest key to 8 characters
-                let trunc_dest_key = if dest_key.len() > 8 {
-                    &dest_key[..8]
+                // truncate dest key
+                let trunc_dest_key = if dest_key.len() > CHARS_FOR_KEY {
+                    &dest_key[..CHARS_FOR_KEY]
                 } else {
                     dest_key
                 };
