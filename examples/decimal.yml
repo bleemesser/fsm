@@ -4,6 +4,8 @@ description: >-
   '123.45', '0'). It accepts integers and decimals. It does not accept
   leading signs or decimals without a leading digit (e.g., '.5').
 
+dfa: true
+
 states:
   q0:
     label: "Start"
