@@ -47,7 +47,8 @@ fn run_cli() -> Result<()> {
     } else if args.viz {
         run_viz(&fsm, &current_path)?;
     } else {
-        println!("Loading DFA with {} states and {} transitions...",
+        println!(
+            "Loading DFA with {} states and {} transitions...",
             match &fsm {
                 Fsm::Dfa(dfa) => dfa.state_keys.len(),
                 Fsm::Nfa { dfa, .. } => dfa.state_keys.len(),
@@ -160,38 +161,6 @@ fn load_fsm(path: &Path) -> Result<Fsm> {
     file.read_to_string(&mut contents)?;
     let fsm = fsm::parser::from_yaml(&contents)?;
 
-    // let runs = 10;
-    // let mut total_time_ns = 0u128;
-
-    // let correct_value = true;
-    // let test_input = "a".chars().cycle().take(1_000_000_000);
-
-    // for i in 0..runs {
-    //     let input = test_input.clone();
-    //     let start_time = std::time::Instant::now();
-
-    //     let accepted = dfa.run(input);
-    //     let duration = start_time.elapsed();
-
-    //     if accepted != correct_value {
-    //         println!(
-    //             "Warning: Test input returned {}, expected {}",
-    //             if accepted { "ACCEPT" } else { "REJECT" },
-    //             if correct_value { "ACCEPT" } else { "REJECT" }
-    //         );
-    //     }
-    //     println!("Run {} of {} completed in: {:.2?}", i + 1, runs, duration);
-    //     total_time_ns += duration.as_nanos();
-    // }
-    // let avg_time_ns = total_time_ns as f64 / runs as f64;
-
-    // println!(
-    //     "Benchmark: {} (Average over {} runs: {:.2} ms)",
-    //     if dfa.run(test_input) { "ACCEPT" } else { "REJECT" },
-    //     runs,
-    //     avg_time_ns / 1_000_000.0
-    // );
-
     Ok(fsm)
 }
 
@@ -200,20 +169,8 @@ fn run_viz(fsm: &Fsm, file_path: &Path) -> Result<()> {
     match fsm {
         Fsm::Dfa(dfa) => {
             let dot_filename = file_path.with_extension("dot");
-            let dot_str = dot_filename.to_str().unwrap_or("dfa.dot");
-
             fsm::dot_generator::make_dot(dfa, &dot_filename)?;
-            println!("\nGraphviz DOT file generated: {}", dot_str);
-
-            println!("\nTo generate a PNG, use Graphviz:");
-            println!(
-                "  dot -Tpng \"{}\" -o \"{}\"",
-                dot_str,
-                file_path
-                    .with_extension("png")
-                    .to_str()
-                    .unwrap_or("dfa.png")
-            );
+            generate_and_print_viz_instructions(file_path, "")?;
         }
         Fsm::Nfa { nfa, dfa } => {
             // NFA visualization
@@ -227,20 +184,7 @@ fn run_viz(fsm: &Fsm, file_path: &Path) -> Result<()> {
                 dfa.description.as_deref(),
                 &nfa_dot_filename,
             )?;
-            println!(
-                "\nGraphviz DOT file for NFA generated: {}",
-                nfa_dot_filename.to_str().unwrap()
-            );
-            let nfa_png_filename = file_path.with_file_name(format!(
-                "{}-nfa.png",
-                file_path.file_stem().unwrap().to_str().unwrap()
-            ));
-            println!("\nTo generate a PNG for the NFA, use Graphviz:");
-            println!(
-                "  dot -Tpng \"{}\" -o \"{}\"",
-                nfa_dot_filename.to_str().unwrap(),
-                nfa_png_filename.to_str().unwrap()
-            );
+            generate_and_print_viz_instructions(file_path, "-nfa")?;
 
             // DFA visualization
             let dfa_dot_filename = file_path.with_file_name(format!(
@@ -248,22 +192,36 @@ fn run_viz(fsm: &Fsm, file_path: &Path) -> Result<()> {
                 file_path.file_stem().unwrap().to_str().unwrap()
             ));
             fsm::dot_generator::make_dot(dfa, &dfa_dot_filename)?;
-            println!(
-                "\nGraphviz DOT file for DFA generated: {}",
-                dfa_dot_filename.to_str().unwrap()
-            );
-            let dfa_png_filename = file_path.with_file_name(format!(
-                "{}-dfa.png",
-                file_path.file_stem().unwrap().to_str().unwrap()
-            ));
-            println!("\nTo generate a PNG for the DFA, use Graphviz:");
-            println!(
-                "  dot -Tpng \"{}\" -o \"{}\"",
-                dfa_dot_filename.to_str().unwrap(),
-                dfa_png_filename.to_str().unwrap()
-            );
+            generate_and_print_viz_instructions(file_path, "-dfa")?;
         }
     }
+
+    Ok(())
+}
+
+fn generate_and_print_viz_instructions(file_path: &Path, stem_suffix: &str) -> Result<()> {
+    let dot_filename = file_path.with_file_name(format!(
+        "{}{}.dot",
+        file_path.file_stem().unwrap().to_str().unwrap(),
+        stem_suffix
+    ));
+    let dot_str = dot_filename.to_str().unwrap_or("fsm.dot");
+
+    println!("\nGraphviz DOT file generated: {}", dot_str);
+
+    println!("\nTo generate a PNG, use Graphviz:");
+    println!(
+        "  dot -Tpng \"{}\" -o \"{}\"",
+        dot_str,
+        file_path
+            .with_file_name(format!(
+                "{}{}.png",
+                file_path.file_stem().unwrap().to_str().unwrap(),
+                stem_suffix
+            ))
+            .to_str()
+            .unwrap_or("fsm.png")
+    );
 
     Ok(())
 }
