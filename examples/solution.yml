@@ -1,0 +1,81 @@
+name: Solution
+description: >-
+  Accepts strings of a/b/c where at least one symbol
+  occurs fewer than 3 times.
+alphabet: ['a','b','c']
+
+dfa: false
+
+states:
+  q0:
+    label: "Start"
+  a0:
+    accept: true
+  a1:
+    accept: true
+  a2:
+    accept: true
+  b0:
+    accept: true
+  b1:
+    accept: true
+  b2:
+    accept: true
+  c0:
+    accept: true
+  c1:
+    accept: true
+  c2:
+    accept: true
+
+start_state: q0
+
+transitions:
+  q0:
+    - to: a0
+      on: epsilon
+    - to: b0
+      on: epsilon
+    - to: c0
+      on: epsilon
+  a0:
+    - to: a1
+      on: a
+    - to: a0
+      on: bc
+  b0:
+    - to: b1
+      on: b
+    - to: b0
+      on: ac
+  c0:
+    - to: c1
+      on: c
+    - to: c0
+      on: ab
+  a1:
+    - to: a2
+      on: a
+    - to: a1
+      on: bc
+  b1:
+    - to: b2
+      on: b
+    - to: b1
+      on: ac
+  c1:
+    - to: c2
+      on: c
+    - to: c1
+      on: ab
+  a2:
+    - to: a2
+      on: bc
+  b2:
+    - to: b2
+      on: ac
+  c2:
+    - to: c2
+      on: ab
+  
+  

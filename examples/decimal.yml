@@ -1,0 +1,61 @@
+name: Decimal FSM
+description: >-
+  DFA to recognize simple unsigned decimal numbers (e.g., '123', '0.45',
+  '123.45', '0'). It accepts integers and decimals. It does not accept
+  leading signs or decimals without a leading digit (e.g., '.5').
+
+states:
+  q0:
+    label: "Start"
+  q1:
+    label: "Digit(s)"
+    accept: true
+  q2:
+    label: "Digit(s) + Decimal"
+  q3:
+    label: "Digit(s) + Decimal + Digit(s)"
+    accept: true
+  q4:
+    label: "Dead State"
+  q5:
+    label: "Single 0"
+    accept: true
+
+alphabet:
+  - { nrange: '0..9' } 
+  - '.'               
+
+start_state: q0
+
+transitions:
+  q0: 
+    - to: q1
+      on: { nrange: '1..9' } 
+    - to: q5
+      on: '0'               
+    - to: q4
+      on: '.'               
+  q1: 
+    - to: q1
+      on: { nrange: '0..9' } 
+    - to: q2
+      on: '.'               
+  q2: 
+    - to: q3
+      on: { nrange: '0..9' } 
+    - to: q4
+      on: '.'               
+  q3: 
+    - to: q3
+      on: { nrange: '0..9' } 
+    - to: q4
+      on: '.'               
+  q4: 
+    
+    - to: q4
+      on: alphabet
+  q5: 
+    - to: q2
+      on: '.'               
+    - to: q4
+      on: { nrange: '0..9' } 

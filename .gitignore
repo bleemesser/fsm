@@ -3,3 +3,4 @@
 *.yml
 *.dot
 *.png
+!examples/*.yml

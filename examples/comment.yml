@@ -1,0 +1,85 @@
+name: C-style comment
+description: >-
+  A DFA that accepts a single, valid C-style block comment.
+  The alphabet includes all alphanumeric characters, space, '*', and '/'.
+  It explicitly rejects nested comments (e.g., "/*/**/").
+  Any characters after the closing "*/" will also be rejected.
+
+dfa: true
+
+alphabet:
+  - { crange: 'a..z' }
+  - { crange: 'A..Z' }
+  - { nrange: '0..9' }
+  - ' '
+  - '*'
+  - '/'
+
+states:
+  q0:
+    label: "Start"
+  q1:
+    label: "Saw '/'"
+  q2:
+    label: "Inside Comment"
+  q2_saw_slash:
+    label: "Inside Comment, Saw '/'"
+  q3:
+    label: "Saw '*' (Potential End)"
+  q_accept:
+    label: "Saw '*/' (Accept)"
+    accept: true
+  q_dead:
+    label: "Dead State"
+
+start_state: q0
+
+transitions:
+  q0:
+    - to: q1
+      on: '/'
+    - to: q_dead
+      on:
+        except: '/'
+
+  q1:
+    - to: q2
+      on: '*'
+    - to: q_dead
+      on:
+        except: '*'
+
+  q2:
+    - to: q3
+      on: '*'
+    - to: q2_saw_slash
+      on: '/'
+    - to: q2
+      on:
+        except: ['*', '/']
+
+  q2_saw_slash: 
+    - to: q_dead 
+      on: '*'
+    - to: q2_saw_slash 
+      on: '/'
+    - to: q2         
+      on:
+        except: ['*', '/']
+
+  q3: 
+    - to: q_accept
+      on: '/'       
+    - to: q3
+      on: '*'       
+    - to: q2         
+      on:
+        except: ['*', '/']
+
+  q_accept:
+    - to: q_dead
+      on: alphabet
+
+  q_dead: 
+    - to: q_dead
+      on: alphabet
