@@ -33,6 +33,7 @@ fn main() {
     }
 }
 
+/// The main CLI logic, handling argument parsing, FSM loading, and REPL.
 fn run_cli() -> Result<()> {
     let args = Args::parse();
 
@@ -199,6 +200,7 @@ fn run_viz(fsm: &Fsm, file_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Helper function to print instructions for generating visualizations.
 fn generate_and_print_viz_instructions(file_path: &Path, stem_suffix: &str) -> Result<()> {
     let dot_filename = file_path.with_file_name(format!(
         "{}{}.dot",

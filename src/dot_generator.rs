@@ -29,9 +29,10 @@ pub fn make_dot(fsm: &Dfa, filename: impl AsRef<Path>) -> Result<()> {
     writeln!(&mut file, "    __start [shape=none, label=\"\"];")?;
 
     for (idx, props) in fsm.state_properties.iter().enumerate() {
-        let state_key = fsm.state_keys.get_by_right(&idx).unwrap_or_else(|| {
-            panic!("State index {} not found in state_keys", idx)
-        });
+        let state_key = fsm
+            .state_keys
+            .get_by_right(&idx)
+            .unwrap_or_else(|| panic!("State index {} not found in state_keys", idx));
 
         let shape = if fsm.accept_states[idx] {
             "doublecircle"
@@ -54,12 +55,15 @@ pub fn make_dot(fsm: &Dfa, filename: impl AsRef<Path>) -> Result<()> {
         )?;
     }
 
-    let start_key = fsm.state_keys.get_by_right(&fsm.start_state_idx).unwrap_or_else(|| {
-        panic!(
-            "Start state index {} not found in state_keys",
-            fsm.start_state_idx
-        )
-    });
+    let start_key = fsm
+        .state_keys
+        .get_by_right(&fsm.start_state_idx)
+        .unwrap_or_else(|| {
+            panic!(
+                "Start state index {} not found in state_keys",
+                fsm.start_state_idx
+            )
+        });
     writeln!(
         &mut file,
         "    __start -> \"{}\";",
@@ -72,9 +76,10 @@ pub fn make_dot(fsm: &Dfa, filename: impl AsRef<Path>) -> Result<()> {
     let alphabet_size = fsm.alphabet.len();
     for (src_idx, row) in fsm.transition_table.chunks(alphabet_size).enumerate() {
         for (alpha_idx, &dest_idx) in row.iter().enumerate() {
-            let c = fsm.alphabet.get_by_right(&alpha_idx).unwrap_or_else(|| {
-                panic!("Alphabet index {} not found in alphabet", alpha_idx)
-            });
+            let c = fsm
+                .alphabet
+                .get_by_right(&alpha_idx)
+                .unwrap_or_else(|| panic!("Alphabet index {} not found in alphabet", alpha_idx));
             transitions
                 .entry((src_idx, dest_idx))
                 .or_default()
@@ -83,12 +88,14 @@ pub fn make_dot(fsm: &Dfa, filename: impl AsRef<Path>) -> Result<()> {
     }
 
     for ((src_idx, dest_idx), chars) in transitions {
-        let src_key = fsm.state_keys.get_by_right(&src_idx).unwrap_or_else(|| {
-            panic!("State index {} not found in state_keys", src_idx)
-        });
-        let dest_key = fsm.state_keys.get_by_right(&dest_idx).unwrap_or_else(|| {
-            panic!("State index {} not found in state_keys", dest_idx)
-        });
+        let src_key = fsm
+            .state_keys
+            .get_by_right(&src_idx)
+            .unwrap_or_else(|| panic!("State index {} not found in state_keys", src_idx));
+        let dest_key = fsm
+            .state_keys
+            .get_by_right(&dest_idx)
+            .unwrap_or_else(|| panic!("State index {} not found in state_keys", dest_idx));
         let label = format_char_set(&chars);
 
         writeln!(
@@ -144,12 +151,15 @@ pub fn make_nfa_dot(
         )?;
     }
 
-    let start_key = nfa.nfa_state_keys.get_by_right(&nfa.start_state).unwrap_or_else(|| {
-        panic!(
-            "Start state index {} not found in nfa_state_keys",
-            nfa.start_state
-        )
-    });
+    let start_key = nfa
+        .nfa_state_keys
+        .get_by_right(&nfa.start_state)
+        .unwrap_or_else(|| {
+            panic!(
+                "Start state index {} not found in nfa_state_keys",
+                nfa.start_state
+            )
+        });
     writeln!(
         &mut file,
         "    __start -> \"{}\";",
@@ -168,12 +178,14 @@ pub fn make_nfa_dot(
     }
 
     for ((src_idx, dest_idx), chars) in transitions_grouped {
-        let src_key = nfa.nfa_state_keys.get_by_right(&src_idx).unwrap_or_else(|| {
-            panic!("State index {} not found in nfa_state_keys", src_idx)
-        });
-        let dest_key = nfa.nfa_state_keys.get_by_right(&dest_idx).unwrap_or_else(|| {
-            panic!("State index {} not found in nfa_state_keys", dest_idx)
-        });
+        let src_key = nfa
+            .nfa_state_keys
+            .get_by_right(&src_idx)
+            .unwrap_or_else(|| panic!("State index {} not found in nfa_state_keys", src_idx));
+        let dest_key = nfa
+            .nfa_state_keys
+            .get_by_right(&dest_idx)
+            .unwrap_or_else(|| panic!("State index {} not found in nfa_state_keys", dest_idx));
         let label_chars: BTreeSet<char> = chars.iter().filter_map(|&c| c).collect();
         let mut label_parts = Vec::new();
         if !label_chars.is_empty() {
