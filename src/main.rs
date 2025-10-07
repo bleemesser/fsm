@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use fsm::dfa::DFA;
+use fsm::parser::Fsm;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
@@ -36,17 +36,33 @@ fn main() {
 fn run_cli() -> Result<()> {
     let args = Args::parse();
 
-    let mut dfa = load_dfa(&args.file)?;
+    let mut fsm = load_fsm(&args.file)?;
     let mut current_path = args.file.clone();
 
     if args.table {
-        dfa.print_transition_table();
+        match &fsm {
+            Fsm::Dfa(dfa) => dfa.print_transition_table(),
+            Fsm::Nfa { dfa, .. } => dfa.print_transition_table(),
+        }
     } else if args.viz {
-        run_viz(&dfa, &current_path)?;
+        run_viz(&fsm, &current_path)?;
     } else {
+        println!("Loading DFA with {} states and {} transitions...",
+            match &fsm {
+                Fsm::Dfa(dfa) => dfa.state_keys.len(),
+                Fsm::Nfa { dfa, .. } => dfa.state_keys.len(),
+            },
+            match &fsm {
+                Fsm::Dfa(dfa) => dfa.transition_table.len(),
+                Fsm::Nfa { dfa, .. } => dfa.transition_table.len(),
+            },
+        );
         println!(
-            "DFA '{}' loaded. (Press Ctrl+C or type 'exit' to quit)",
-            dfa.name
+            "FSM '{}' loaded. (Press Ctrl+C or type 'exit' to quit)",
+            match &fsm {
+                Fsm::Dfa(dfa) => &dfa.name,
+                Fsm::Nfa { dfa, .. } => &dfa.name,
+            }
         );
         println!("Commands: 'exit', 'reload', 'load <file.yml>'");
 
@@ -65,10 +81,16 @@ fn run_cli() -> Result<()> {
                         "exit" | "quit" => break,
                         "reload" => {
                             println!("Reloading '{}'...", current_path.display());
-                            match load_dfa(&current_path) {
-                                Ok(new_dfa) => {
-                                    dfa = new_dfa;
-                                    println!("DFA '{}' reloaded successfully.", dfa.name);
+                            match load_fsm(&current_path) {
+                                Ok(new_fsm) => {
+                                    fsm = new_fsm;
+                                    println!(
+                                        "FSM '{}' reloaded successfully.",
+                                        match &fsm {
+                                            Fsm::Dfa(dfa) => &dfa.name,
+                                            Fsm::Nfa { dfa, .. } => &dfa.name,
+                                        }
+                                    );
                                 }
                                 Err(e) => eprintln!("Failed to reload: {}", e),
                             }
@@ -77,11 +99,17 @@ fn run_cli() -> Result<()> {
                             if let Some(path_str) = input.strip_prefix("load ").map(str::trim) {
                                 let new_path = PathBuf::from(path_str);
                                 println!("Loading '{}'...", new_path.display());
-                                match load_dfa(&new_path) {
-                                    Ok(new_dfa) => {
-                                        dfa = new_dfa;
+                                match load_fsm(&new_path) {
+                                    Ok(new_fsm) => {
+                                        fsm = new_fsm;
                                         current_path = new_path;
-                                        println!("DFA '{}' loaded successfully.", dfa.name);
+                                        println!(
+                                            "FSM '{}' loaded successfully.",
+                                            match &fsm {
+                                                Fsm::Dfa(dfa) => &dfa.name,
+                                                Fsm::Nfa { dfa, .. } => &dfa.name,
+                                            }
+                                        );
                                     }
                                     Err(e) => eprintln!("Failed to load: {}", e),
                                 }
@@ -90,10 +118,18 @@ fn run_cli() -> Result<()> {
                             }
                         }
                         _ => {
+                            let dfa = match &fsm {
+                                Fsm::Dfa(dfa) => dfa,
+                                Fsm::Nfa { dfa, .. } => dfa,
+                            };
                             let start_time = std::time::Instant::now();
                             let accepted = dfa.run(input.chars());
                             let duration = start_time.elapsed();
-                            println!("{} | Processed in: {:.2?}", if accepted { "ACCEPT" } else { "REJECT" }, duration);
+                            println!(
+                                "{} | Processed in: {:.2?}",
+                                if accepted { "ACCEPT" } else { "REJECT" },
+                                duration
+                            );
                         }
                     }
                 }
@@ -117,23 +153,23 @@ fn run_cli() -> Result<()> {
     Ok(())
 }
 
-/// Helper function to load a DFA from a file path.
-fn load_dfa(path: &Path) -> Result<DFA> {
+/// Helper function to load a FSM from a file path.
+fn load_fsm(path: &Path) -> Result<Fsm> {
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    let dfa = DFA::from_yaml(&contents)?;
+    let fsm = fsm::parser::from_yaml(&contents)?;
 
     // let runs = 10;
     // let mut total_time_ns = 0u128;
 
     // let correct_value = true;
     // let test_input = "a".chars().cycle().take(1_000_000_000);
-    
+
     // for i in 0..runs {
     //     let input = test_input.clone();
     //     let start_time = std::time::Instant::now();
-        
+
     //     let accepted = dfa.run(input);
     //     let duration = start_time.elapsed();
 
@@ -156,26 +192,78 @@ fn load_dfa(path: &Path) -> Result<DFA> {
     //     avg_time_ns / 1_000_000.0
     // );
 
-    Ok(dfa)
+    Ok(fsm)
 }
 
 /// Helper function to run the visualization logic.
-fn run_viz(dfa: &DFA, file_path: &Path) -> Result<()> {
-    let dot_filename = file_path.with_extension("dot");
-    let dot_str = dot_filename.to_str().unwrap_or("dfa.dot");
+fn run_viz(fsm: &Fsm, file_path: &Path) -> Result<()> {
+    match fsm {
+        Fsm::Dfa(dfa) => {
+            let dot_filename = file_path.with_extension("dot");
+            let dot_str = dot_filename.to_str().unwrap_or("dfa.dot");
 
-    fsm::dot_generator::make_dot(dfa, &dot_filename)?;
-    println!("\nGraphviz DOT file generated: {}", dot_str);
+            fsm::dot_generator::make_dot(dfa, &dot_filename)?;
+            println!("\nGraphviz DOT file generated: {}", dot_str);
 
-    println!("\nTo generate a PNG, use Graphviz:");
-    println!(
-        "  dot -Tpng \"{}\" -o \"{}\"",
-        dot_str,
-        file_path
-            .with_extension("png")
-            .to_str()
-            .unwrap_or("dfa.png")
-    );
+            println!("\nTo generate a PNG, use Graphviz:");
+            println!(
+                "  dot -Tpng \"{}\" -o \"{}\"",
+                dot_str,
+                file_path
+                    .with_extension("png")
+                    .to_str()
+                    .unwrap_or("dfa.png")
+            );
+        }
+        Fsm::Nfa { nfa, dfa } => {
+            // NFA visualization
+            let nfa_dot_filename = file_path.with_file_name(format!(
+                "{}-nfa.dot",
+                file_path.file_stem().unwrap().to_str().unwrap()
+            ));
+            fsm::dot_generator::make_nfa_dot(
+                nfa,
+                &dfa.name,
+                dfa.description.as_deref(),
+                &nfa_dot_filename,
+            )?;
+            println!(
+                "\nGraphviz DOT file for NFA generated: {}",
+                nfa_dot_filename.to_str().unwrap()
+            );
+            let nfa_png_filename = file_path.with_file_name(format!(
+                "{}-nfa.png",
+                file_path.file_stem().unwrap().to_str().unwrap()
+            ));
+            println!("\nTo generate a PNG for the NFA, use Graphviz:");
+            println!(
+                "  dot -Tpng \"{}\" -o \"{}\"",
+                nfa_dot_filename.to_str().unwrap(),
+                nfa_png_filename.to_str().unwrap()
+            );
+
+            // DFA visualization
+            let dfa_dot_filename = file_path.with_file_name(format!(
+                "{}-dfa.dot",
+                file_path.file_stem().unwrap().to_str().unwrap()
+            ));
+            fsm::dot_generator::make_dot(dfa, &dfa_dot_filename)?;
+            println!(
+                "\nGraphviz DOT file for DFA generated: {}",
+                dfa_dot_filename.to_str().unwrap()
+            );
+            let dfa_png_filename = file_path.with_file_name(format!(
+                "{}-dfa.png",
+                file_path.file_stem().unwrap().to_str().unwrap()
+            ));
+            println!("\nTo generate a PNG for the DFA, use Graphviz:");
+            println!(
+                "  dot -Tpng \"{}\" -o \"{}\"",
+                dfa_dot_filename.to_str().unwrap(),
+                dfa_png_filename.to_str().unwrap()
+            );
+        }
+    }
 
     Ok(())
 }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bimap::BiMap;
 
-use crate::parser;
+use crate::parser::{self, Fsm};
 
 #[derive(Debug, Clone)]
 pub struct StateInfo {
@@ -10,7 +10,7 @@ pub struct StateInfo {
 }
 
 #[derive(Debug)]
-pub struct DFA {
+pub struct Dfa {
     pub name: String,
     pub description: Option<String>,
 
@@ -27,14 +27,14 @@ pub struct DFA {
     pub state_properties: Vec<StateInfo>, // index -> state properties
 }
 
-impl DFA {
+impl Dfa {
     /// Parses a DFA from a YAML string specification.
-    pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
+    pub fn from_yaml(yaml_content: &str) -> Result<Fsm> {
         parser::from_yaml(yaml_content)
     }
 
     /// Runs the DFA on the given input string and returns true if accepted, false otherwise.
-    pub fn run<I>(&self, input: I) -> bool 
+    pub fn run<I>(&self, input: I) -> bool
     where
         I: IntoIterator<Item = char>,
     {
@@ -88,13 +88,11 @@ impl DFA {
         for (c, &idx) in self.alphabet.iter() {
             if c == &' ' {
                 alphabet_header[idx] = '␣'; // Use a special symbol for space
-            } else
-
-            if idx < alphabet_header.len() {
+            } else if idx < alphabet_header.len() {
                 alphabet_header[idx] = *c;
             }
         }
-        const CHARS_FOR_KEY: usize = 12;
+        const CHARS_FOR_KEY: usize = 18;
         const PREFIX_WIDTH: usize = 4; // "--> " or "    "
         const STATE_COL_WIDTH: usize = CHARS_FOR_KEY + 2; // chars for key + 1 for '*' + 1 space
         const CELL_WIDTH: usize = CHARS_FOR_KEY + 1; // chars for key + 1 space
@@ -130,18 +128,13 @@ impl DFA {
             let state_display = format!(
                 "{}{}",
                 trunc_key,
-                if self.accept_states[src_idx] {
-                    "*"
-                } else {
-                    ""
-                }
+                if self.accept_states[src_idx] { "*" } else { "" }
             );
 
             print!("{:<STATE_COL_WIDTH$}", state_display);
 
             for alpha_idx in 0..alphabet_size {
-                let dest_idx =
-                    self.transition_table[(src_idx * alphabet_size) + alpha_idx];
+                let dest_idx = self.transition_table[(src_idx * alphabet_size) + alpha_idx];
 
                 let dest_key = self
                     .state_keys

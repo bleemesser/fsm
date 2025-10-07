@@ -1,4 +1,5 @@
-use crate::dfa::DFA;
+use crate::dfa::Dfa;
+use crate::parser::Nfa;
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -6,7 +7,7 @@ use std::io::Write;
 use std::path::Path;
 
 /// Generates a Graphviz DOT file representation of the DFA.
-pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
+pub fn make_dot(fsm: &Dfa, filename: impl AsRef<Path>) -> Result<()> {
     let mut file = File::create(filename)?;
 
     writeln!(
@@ -62,11 +63,7 @@ pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
 
     // transition table is now a 1d vec of size (num_states * alphabet_size)
     let alphabet_size = fsm.alphabet.len();
-    for (src_idx, row) in fsm
-        .transition_table
-        .chunks(alphabet_size)
-        .enumerate()
-    {
+    for (src_idx, row) in fsm.transition_table.chunks(alphabet_size).enumerate() {
         for (alpha_idx, &dest_idx) in row.iter().enumerate() {
             let c = fsm.alphabet.get_by_right(&alpha_idx).unwrap();
             transitions
@@ -80,6 +77,91 @@ pub fn make_dot(fsm: &DFA, filename: impl AsRef<Path>) -> Result<()> {
         let src_key = fsm.state_keys.get_by_right(&src_idx).unwrap();
         let dest_key = fsm.state_keys.get_by_right(&dest_idx).unwrap();
         let label = format_char_set(&chars);
+
+        writeln!(
+            &mut file,
+            "    \"{}\" -> \"{}\" [label=\"{}\"];",
+            src_key.replace('\"', "\\\""),
+            dest_key.replace('\"', "\\\""),
+            label.replace('\"', "\\\"")
+        )?;
+    }
+
+    writeln!(&mut file, "}}")?;
+    Ok(())
+}
+
+pub fn make_nfa_dot(
+    nfa: &Nfa,
+    fsm_name: &str,
+    description: Option<&str>,
+    filename: impl AsRef<Path>,
+) -> Result<()> {
+    let mut file = File::create(filename)?;
+
+    writeln!(
+        &mut file,
+        "digraph \"{}\" {{",
+        fsm_name.replace('\"', "\\\"")
+    )?;
+    writeln!(&mut file, "    rankdir=LR;")?;
+
+    let label = description
+        .unwrap_or(fsm_name)
+        .replace('\"', "\\\"")
+        .replace('\n', "\\n");
+    writeln!(&mut file, "    label=\"{}\";", label)?;
+    writeln!(&mut file, "    node [shape=circle];")?;
+
+    writeln!(&mut file, "    __start [shape=none, label=\"\"];")?;
+
+    for (state_key, &idx) in nfa.nfa_state_keys.iter() {
+        let shape = if nfa.nfa_accept_states.contains(&idx) {
+            "doublecircle"
+        } else {
+            "circle"
+        };
+
+        writeln!(
+            &mut file,
+            "    \"{}\" [label=\"{}\", shape={}];",
+            state_key.replace('\"', "\\\""),
+            state_key.replace('\"', "\\\""),
+            shape
+        )?;
+    }
+
+    let start_key = nfa.nfa_state_keys.get_by_right(&nfa.start_state).unwrap();
+    writeln!(
+        &mut file,
+        "    __start -> \"{}\";",
+        start_key.replace('\"', "\\\"")
+    )?;
+
+    // group transitions by (src, dest) to consolidate labels
+    let mut transitions_grouped: BTreeMap<(usize, usize), BTreeSet<Option<char>>> = BTreeMap::new();
+    for ((src_idx, on_char), dest_states) in &nfa.transitions {
+        for &dest_idx in dest_states {
+            transitions_grouped
+                .entry((*src_idx, dest_idx))
+                .or_default()
+                .insert(*on_char);
+        }
+    }
+
+    for ((src_idx, dest_idx), chars) in transitions_grouped {
+        let src_key = nfa.nfa_state_keys.get_by_right(&src_idx).unwrap();
+        let dest_key = nfa.nfa_state_keys.get_by_right(&dest_idx).unwrap();
+        let label_chars: BTreeSet<char> = chars.iter().filter_map(|&c| c).collect();
+        let mut label_parts = Vec::new();
+        if !label_chars.is_empty() {
+            label_parts.push(format_char_set(&label_chars));
+        }
+        if chars.contains(&None) {
+            label_parts.push("ε".to_string());
+        }
+
+        let label = label_parts.join(", ");
 
         writeln!(
             &mut file,

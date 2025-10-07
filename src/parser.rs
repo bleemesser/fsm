@@ -1,5 +1,5 @@
-use crate::dfa::{DFA, StateInfo};
-use anyhow::{anyhow, Result};
+use crate::dfa::{Dfa, StateInfo};
+use anyhow::{Result, anyhow};
 use bimap::BiMap;
 use serde::{
     Deserialize, Deserializer,
@@ -11,16 +11,23 @@ use std::{
 };
 
 /// Intermediate representation of an NFA for subset construction.
-struct Nfa {
+#[derive(Debug, Clone)]
+pub struct Nfa {
     /// Map from (from_state, on_char) to a set of destination states.
     /// `on_char = None` represents an epsilon transition.
-    transitions: BTreeMap<(usize, Option<char>), BTreeSet<usize>>,
-    start_state: usize,
+    pub transitions: BTreeMap<(usize, Option<char>), BTreeSet<usize>>,
+    pub start_state: usize,
     /// Set of original NFA state indices that are accepting.
-    nfa_accept_states: BTreeSet<usize>,
+    pub nfa_accept_states: BTreeSet<usize>,
     /// Original state keys, used for creating labels for new DFA states.
-    nfa_state_keys: BiMap<String, usize>,
+    pub nfa_state_keys: BiMap<String, usize>,
 }
+
+pub enum Fsm {
+    Dfa(Dfa),
+    Nfa { nfa: Nfa, dfa: Dfa },
+}
+
 impl Nfa {
     /// Creates an NFA from the parsed YAML components.
     fn from_yaml(
@@ -77,26 +84,30 @@ impl Nfa {
         name: &str,
         description: Option<String>,
         alphabet_set: &BTreeSet<char>,
-    ) -> Result<DFA> {
+    ) -> Result<Dfa> {
         let alphabet: Vec<char> = alphabet_set.iter().cloned().collect();
-        let alphabet_bimap: BiMap<char, usize> =
-            alphabet.iter().cloned().enumerate().map(|(i, c)| (c, i)).collect();
-        
+        let alphabet_bimap: BiMap<char, usize> = alphabet
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, c)| (c, i))
+            .collect();
+
         // set of NFA states to new DFA state index
         let mut dfa_states: BTreeMap<BTreeSet<usize>, usize> = BTreeMap::new();
         let mut worklist: VecDeque<BTreeSet<usize>> = VecDeque::new();
-        
+
         let mut dfa_state_keys = BiMap::new();
         let mut dfa_state_properties = Vec::new();
         let mut dfa_accept_states = Vec::new();
         let mut dfa_transitions = BTreeMap::new();
 
         let start_nfa_set = self.epsilon_closure(&BTreeSet::from([self.start_state]));
-        
+
         let start_dfa_idx = 0;
         dfa_states.insert(start_nfa_set.clone(), start_dfa_idx);
         worklist.push_back(start_nfa_set);
-        
+
         while let Some(current_nfa_set) = worklist.pop_front() {
             let current_dfa_idx = *dfa_states.get(&current_nfa_set).unwrap();
 
@@ -117,11 +128,11 @@ impl Nfa {
                     worklist.push_back(target_nfa_set);
                     new_idx
                 };
-                
+
                 dfa_transitions.insert((current_dfa_idx, alpha_idx), next_dfa_idx);
             }
         }
-        
+
         // dead state for missing transitions. equivalent to Ø state.
         let num_dfa_states = dfa_states.len();
         let mut needs_dead_state = false;
@@ -133,7 +144,7 @@ impl Nfa {
                 }
             }
         }
-        
+
         let dead_state_idx = if needs_dead_state {
             let idx = num_dfa_states;
             for j in 0..alphabet.len() {
@@ -143,21 +154,25 @@ impl Nfa {
         } else {
             None
         };
-        
+
         let total_dfa_states = num_dfa_states + if needs_dead_state { 1 } else { 0 };
 
         let mut sorted_dfa_states: Vec<(BTreeSet<usize>, usize)> = dfa_states.into_iter().collect();
         sorted_dfa_states.sort_by_key(|(_, idx)| *idx);
 
         for (nfa_set, dfa_idx) in sorted_dfa_states {
-            let is_accepting = nfa_set.intersection(&self.nfa_accept_states).next().is_some();
+            let is_accepting = nfa_set
+                .intersection(&self.nfa_accept_states)
+                .next()
+                .is_some();
             dfa_accept_states.push(is_accepting);
 
-            let mut state_keys: Vec<&str> = nfa_set.iter()
+            let mut state_keys: Vec<&str> = nfa_set
+                .iter()
                 .map(|id| self.nfa_state_keys.get_by_right(id).unwrap().as_str())
                 .collect();
             state_keys.sort();
-            
+
             let new_key = format!("{{{}}}", state_keys.join(","));
             dfa_state_keys.insert(new_key.clone(), dfa_idx);
             dfa_state_properties.push(StateInfo {
@@ -165,20 +180,24 @@ impl Nfa {
                 accept: is_accepting,
             });
         }
-        
+
         if let Some(idx) = dead_state_idx {
             let key = "FAILURE".to_string();
             dfa_state_keys.insert(key.clone(), idx);
-            dfa_state_properties.push(StateInfo { label: Some(key), accept: false });
+            dfa_state_properties.push(StateInfo {
+                label: Some(key),
+                accept: false,
+            });
             dfa_accept_states.push(false);
         }
-        
-        let mut transition_table = vec![dead_state_idx.unwrap_or(0); total_dfa_states * alphabet.len()];
+
+        let mut transition_table =
+            vec![dead_state_idx.unwrap_or(0); total_dfa_states * alphabet.len()];
         for ((from, alpha), to) in dfa_transitions {
             transition_table[from * alphabet.len() + alpha] = to;
         }
 
-        Ok(DFA {
+        Ok(Dfa {
             name: name.to_string(),
             description,
             alphabet: alphabet_bimap,
@@ -323,9 +342,9 @@ impl YamlSymbolSpecifier {
                     if parts.len() != 2 {
                         return Err(anyhow!("Invalid numeric range: {}", nrange));
                     }
-                    let start: u8 = parts[0].parse().map_err(|_| {
-                        anyhow!("Invalid start number in range: {}", nrange)
-                    })?;
+                    let start: u8 = parts[0]
+                        .parse()
+                        .map_err(|_| anyhow!("Invalid start number in range: {}", nrange))?;
                     let end: u8 = parts[1]
                         .parse()
                         .map_err(|_| anyhow!("Invalid end number in range: {}", nrange))?;
@@ -336,10 +355,7 @@ impl YamlSymbolSpecifier {
                         ));
                     }
                     if start > 9 || end > 9 {
-                        return Err(anyhow!(
-                            "Numeric range must be between 0 and 9: {}",
-                            nrange
-                        ));
+                        return Err(anyhow!("Numeric range must be between 0 and 9: {}", nrange));
                     }
                     for n in start..=end {
                         char_set.insert((b'0' + n) as char);
@@ -408,10 +424,7 @@ impl YamlTransitionOn {
                     }
                 };
                 Ok(TransitionTrigger::Chars(
-                    full_alphabet
-                        .difference(&except_chars)
-                        .cloned()
-                        .collect(),
+                    full_alphabet.difference(&except_chars).cloned().collect(),
                 ))
             }
         }
@@ -431,7 +444,7 @@ struct YamlTransitionMapping {
     on: YamlTransitionOn,
 }
 
-pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
+pub fn from_yaml(yaml_content: &str) -> Result<Fsm> {
     let yaml_dfa: YamlDFA = serde_yaml::from_str(yaml_content)?;
 
     let alphabet_set = read_alphabet(&yaml_dfa.alphabet)?;
@@ -469,7 +482,7 @@ pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
             &alphabet_bimap,
         )?;
         let accept_states = state_infos.iter().map(|info| info.accept).collect();
-        Ok(DFA {
+        Ok(Fsm::Dfa(Dfa {
             name: yaml_dfa.name,
             description: yaml_dfa.description,
             alphabet: alphabet_bimap,
@@ -478,7 +491,7 @@ pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
             accept_states,
             transition_table,
             state_properties: state_infos,
-        })
+        }))
     } else {
         let nfa = Nfa::from_yaml(
             &state_bimap,
@@ -487,7 +500,10 @@ pub fn from_yaml(yaml_content: &str) -> Result<DFA> {
             yaml_dfa.transitions,
             &alphabet_set,
         )?;
-        nfa.to_dfa(&yaml_dfa.name, yaml_dfa.description, &alphabet_set)
+        let dfa = nfa
+            .clone()
+            .to_dfa(&yaml_dfa.name, yaml_dfa.description, &alphabet_set)?;
+        Ok(Fsm::Nfa { nfa, dfa })
     }
 }
 
@@ -539,13 +555,13 @@ fn build_dfa_transitions(
                         "Epsilon transitions are not allowed when 'dfa' flag is true. (state '{}')",
                         src_state_key
                     ));
-                }, 
+                }
                 TransitionTrigger::Chars(on_chars) => {
                     for c in on_chars {
                         let alpha_idx = get_alphabet_idx(alphabet_bimap, c)?;
-        
+
                         let table_idx = src_idx * alphabet_size + alpha_idx;
-        
+
                         match transition_table[table_idx] {
                             Some(existing_dest_idx) => {
                                 if existing_dest_idx != dest_idx {
@@ -554,7 +570,7 @@ fn build_dfa_transitions(
                                     let existing_dest_key = state_bimap
                                         .get_by_right(&existing_dest_idx)
                                         .unwrap_or(&err_state);
-        
+
                                     return Err(anyhow!(
                                         "Ambiguous transition in state '{}' for symbol '{}': \
                                          maps to both '{}' and '{}'",
