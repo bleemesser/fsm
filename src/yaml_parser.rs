@@ -6,8 +6,8 @@ use serde::{
     de::{self, MapAccess, Visitor},
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    fmt,
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque, hash_map::Entry},
+    fmt, hash::Hash,
 };
 
 /// Intermediate representation of an NFA for subset construction.
@@ -94,15 +94,32 @@ impl Nfa {
             .collect();
 
         // set of NFA states to new DFA state index
-        let mut dfa_states: BTreeMap<BTreeSet<usize>, usize> = BTreeMap::new();
+        let mut dfa_states: HashMap<BTreeSet<usize>, usize> = HashMap::new();
         let mut worklist: VecDeque<BTreeSet<usize>> = VecDeque::new();
 
         let mut dfa_state_keys = BiMap::new();
         let mut dfa_state_properties = Vec::new();
         let mut dfa_accept_states = Vec::new();
-        let mut dfa_transitions = BTreeMap::new();
+        let mut dfa_transitions = HashMap::new();
 
-        let start_nfa_set = self.epsilon_closure(&BTreeSet::from([self.start_state]));
+        let num_nfa_states = self.nfa_state_keys.len();
+        let mut epsilon_closures: Vec<BTreeSet<usize>> = Vec::with_capacity(num_nfa_states);
+        for i in 0..num_nfa_states {
+            epsilon_closures.push(self.epsilon_closure(&BTreeSet::from([i])));
+        }
+
+        fn get_epsilon_closure(
+            closures: &[BTreeSet<usize>],
+            states: &BTreeSet<usize>,
+        ) -> BTreeSet<usize> {
+            let mut result = BTreeSet::new();
+            for &s in states {
+                result.extend(closures[s].iter().cloned());
+            }
+            result
+        }
+
+        let start_nfa_set = get_epsilon_closure(&epsilon_closures, &BTreeSet::from([self.start_state]));
 
         let start_dfa_idx = 0;
         dfa_states.insert(start_nfa_set.clone(), start_dfa_idx);
@@ -113,20 +130,21 @@ impl Nfa {
 
             for (alpha_idx, &symbol) in alphabet.iter().enumerate() {
                 let directly_reachable_states = self.move_on_char(&current_nfa_set, symbol);
-                let target_nfa_set = self.epsilon_closure(&directly_reachable_states);
+                let target_nfa_set = get_epsilon_closure(&epsilon_closures, &directly_reachable_states);
 
                 if target_nfa_set.is_empty() {
                     continue;
                 }
 
                 // add to DFA or get existing index
-                let next_dfa_idx = if let Some(&idx) = dfa_states.get(&target_nfa_set) {
-                    idx
-                } else {
-                    let new_idx = dfa_states.len();
-                    dfa_states.insert(target_nfa_set.clone(), new_idx);
-                    worklist.push_back(target_nfa_set);
-                    new_idx
+                let dfa_states_len = dfa_states.len();
+                let next_dfa_idx = match dfa_states.entry(target_nfa_set) {
+                    Entry::Occupied(e) => *e.get(),
+                    Entry::Vacant(e) => {
+                        worklist.push_back(e.key().clone());
+                        e.insert(dfa_states_len);
+                        dfa_states_len
+                    }
                 };
 
                 dfa_transitions.insert((current_dfa_idx, alpha_idx), next_dfa_idx);
