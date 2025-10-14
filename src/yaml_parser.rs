@@ -7,15 +7,16 @@ use serde::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque, hash_map::Entry},
-    fmt, hash::Hash,
+    fmt,
+    hash::Hash,
 };
 
 /// Intermediate representation of an NFA for subset construction.
 #[derive(Debug, Clone)]
 pub struct Nfa {
-    /// Map from (from_state, on_char) to a set of destination states.
-    /// `on_char = None` represents an epsilon transition.
-    pub transitions: BTreeMap<(usize, Option<char>), BTreeSet<usize>>,
+    /// Vector of HashMaps, indexed by state. `on_char = None` is epsilon.
+    /// Each map points to a set of destination state indices.
+    pub transitions: Vec<HashMap<Option<char>, BTreeSet<usize>>>,
     pub start_state: usize,
     /// Set of original NFA state indices that are accepting.
     pub nfa_accept_states: BTreeSet<usize>,
@@ -37,7 +38,7 @@ impl Nfa {
         yaml_transitions: BTreeMap<String, Vec<YamlTransitionMapping>>,
         full_alphabet_set: &BTreeSet<char>,
     ) -> Result<Self> {
-        let mut transitions = BTreeMap::new();
+        let mut transitions = vec![HashMap::new(); state_bimap.len()];
         let mut nfa_accept_states = BTreeSet::new();
 
         for (i, info) in state_infos.iter().enumerate() {
@@ -53,15 +54,15 @@ impl Nfa {
 
                 match mapping.on.to_transition_trigger(full_alphabet_set)? {
                     TransitionTrigger::Epsilon => {
-                        transitions
-                            .entry((src_idx, None))
+                        transitions[src_idx]
+                            .entry(None)
                             .or_insert_with(BTreeSet::new)
                             .insert(dest_idx);
                     }
                     TransitionTrigger::Chars(chars) => {
                         for c in chars {
-                            transitions
-                                .entry((src_idx, Some(c)))
+                            transitions[src_idx]
+                                .entry(Some(c))
                                 .or_insert_with(BTreeSet::new)
                                 .insert(dest_idx);
                         }
@@ -119,7 +120,8 @@ impl Nfa {
             result
         }
 
-        let start_nfa_set = get_epsilon_closure(&epsilon_closures, &BTreeSet::from([self.start_state]));
+        let start_nfa_set =
+            get_epsilon_closure(&epsilon_closures, &BTreeSet::from([self.start_state]));
 
         let start_dfa_idx = 0;
         dfa_states.insert(start_nfa_set.clone(), start_dfa_idx);
@@ -130,7 +132,8 @@ impl Nfa {
 
             for (alpha_idx, &symbol) in alphabet.iter().enumerate() {
                 let directly_reachable_states = self.move_on_char(&current_nfa_set, symbol);
-                let target_nfa_set = get_epsilon_closure(&epsilon_closures, &directly_reachable_states);
+                let target_nfa_set =
+                    get_epsilon_closure(&epsilon_closures, &directly_reachable_states);
 
                 if target_nfa_set.is_empty() {
                     continue;
@@ -232,7 +235,7 @@ impl Nfa {
         let mut closure = states.clone();
         let mut worklist: Vec<usize> = states.iter().cloned().collect();
         while let Some(state) = worklist.pop() {
-            if let Some(epsilon_dests) = self.transitions.get(&(state, None)) {
+            if let Some(epsilon_dests) = self.transitions[state].get(&None) {
                 for &dest in epsilon_dests {
                     if closure.insert(dest) {
                         worklist.push(dest);
@@ -247,7 +250,7 @@ impl Nfa {
     fn move_on_char(&self, states: &BTreeSet<usize>, symbol: char) -> BTreeSet<usize> {
         let mut result = BTreeSet::new();
         for &state in states {
-            if let Some(dests) = self.transitions.get(&(state, Some(symbol))) {
+            if let Some(dests) = self.transitions[state].get(&Some(symbol)) {
                 result.extend(dests);
             }
         }

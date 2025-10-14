@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use bimap::BiMap;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -24,14 +24,14 @@ pub enum Expression {
 /// A temporary representation of an NFA used during construction.
 #[derive(Debug)]
 struct NfaBuilder {
-    transitions: BTreeMap<(usize, Option<char>), BTreeSet<usize>>,
+    transitions: Vec<HashMap<Option<char>, BTreeSet<usize>>>,
     state_counter: usize,
 }
 
 impl NfaBuilder {
     fn new() -> Self {
         NfaBuilder {
-            transitions: BTreeMap::new(),
+            transitions: Vec::new(),
             state_counter: 0,
         }
     }
@@ -39,11 +39,12 @@ impl NfaBuilder {
     fn new_state(&mut self) -> usize {
         let state = self.state_counter;
         self.state_counter += 1;
+        self.transitions.push(HashMap::new()); // Add a new map for the new state
         state
     }
 
     fn add_transition(&mut self, from: usize, to: usize, on: Option<char>) {
-        self.transitions.entry((from, on)).or_default().insert(to);
+        self.transitions[from].entry(on).or_default().insert(to);
     }
 }
 
@@ -84,11 +85,13 @@ pub fn from_regex(regex: &str) -> Result<Fsm> {
     let duration = start.elapsed();
     println!("Constructed NFA in: {:.2?}", duration);
 
-    let alphabet_set = nfa
+    let alphabet_set: BTreeSet<char> = nfa
         .transitions
-        .keys()
-        .filter_map(|(_, c)| *c)
-        .collect::<BTreeSet<char>>();
+        .iter()
+        .flat_map(|state_transitions| {
+            state_transitions.keys().filter_map(|&c| c) // filter out None (epsilon transitions)
+        })
+        .collect();
 
     let name = format!("regex: {}", regex);
     let start = std::time::Instant::now();

@@ -168,12 +168,14 @@ pub fn make_nfa_dot(
 
     // group transitions by (src, dest) to consolidate labels
     let mut transitions_grouped: BTreeMap<(usize, usize), BTreeSet<Option<char>>> = BTreeMap::new();
-    for ((src_idx, on_char), dest_states) in &nfa.transitions {
-        for &dest_idx in dest_states {
-            transitions_grouped
-                .entry((*src_idx, dest_idx))
-                .or_default()
-                .insert(*on_char);
+    for (src_idx, transition) in nfa.transitions.iter().enumerate() {
+        for (on_char, dest_states) in transition {
+            for &dest_idx in dest_states {
+                transitions_grouped
+                    .entry((src_idx, dest_idx))
+                    .or_default()
+                    .insert(*on_char);
+            }
         }
     }
 
