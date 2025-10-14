@@ -44,10 +44,7 @@ fn run_cli() -> Result<()> {
     let mut fsm = if let Some(path) = &args.file {
         load_fsm(path)?
     } else if let Some(regex) = &args.regex {
-        let start = std::time::Instant::now();
         let fsm = regex_parser::from_regex(regex)?;
-        let duration = start.elapsed();
-        println!("Regex parsed and NFA/DFA constructed in {:.2?}", duration);
         fsm
     } else {
         return Err(anyhow::anyhow!(

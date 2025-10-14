@@ -104,7 +104,7 @@ impl Nfa {
         let mut dfa_transitions = HashMap::new();
 
         let num_nfa_states = self.nfa_state_keys.len();
-        
+
         // precompute epsilon closures for all NFA states
         let mut epsilon_closures: Vec<BTreeSet<usize>> = Vec::with_capacity(num_nfa_states);
         for i in 0..num_nfa_states {
@@ -122,7 +122,7 @@ impl Nfa {
 
             for (alpha_idx, &symbol) in alphabet.iter().enumerate() {
                 let directly_reachable_states = self.move_on_char(&current_nfa_set, symbol);
-            
+
                 if directly_reachable_states.is_empty() {
                     continue;
                 }
@@ -131,7 +131,7 @@ impl Nfa {
                 for nfa_state in directly_reachable_states {
                     target_nfa_set.extend(&epsilon_closures[nfa_state]);
                 }
-                
+
                 let dfa_states_len = dfa_states.len();
                 let next_dfa_idx = match dfa_states.entry(target_nfa_set) {
                     Entry::Occupied(entry) => *entry.get(),

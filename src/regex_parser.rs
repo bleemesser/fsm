@@ -62,13 +62,9 @@ impl NfaBuilder {
 /// - Exponentiation: (ab)^3 (exactly 3 occurrences of ab, equiv to ababab)
 /// - Optional: a? (zero or one occurrence of a, equiv to (a|ε))
 pub fn from_regex(regex: &str) -> Result<Fsm> {
-    let start = std::time::Instant::now();
     let expr = parse(regex)?;
-    let duration = start.elapsed();
-    println!("Parsed regex in: {:.2?}", duration);
     let mut builder = NfaBuilder::new();
 
-    let start = std::time::Instant::now();
     let (start_state, accept_state) = expr_to_nfa(&expr, &mut builder);
 
     let mut nfa_state_keys = BiMap::new();
@@ -82,8 +78,6 @@ pub fn from_regex(regex: &str) -> Result<Fsm> {
         nfa_accept_states: BTreeSet::from([accept_state]),
         nfa_state_keys,
     };
-    let duration = start.elapsed();
-    println!("Constructed NFA in: {:.2?}", duration);
 
     let alphabet_set: BTreeSet<char> = nfa
         .transitions
@@ -94,10 +88,7 @@ pub fn from_regex(regex: &str) -> Result<Fsm> {
         .collect();
 
     let name = format!("regex: {}", regex);
-    let start = std::time::Instant::now();
     let dfa = nfa.clone().to_dfa(&name, None, &alphabet_set)?;
-    let duration = start.elapsed();
-    println!("Converted NFA to DFA in: {:.2?}", duration);
 
     Ok(Fsm::Nfa { dfa, nfa })
 }
