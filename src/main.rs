@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
-use fsm::parser::Fsm;
+use fsm::regex_parser;
+use fsm::yaml_parser::Fsm;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
@@ -14,8 +15,11 @@ use std::path::{Path, PathBuf};
 #[command(version, about, long_about = None)]
 struct Args {
     /// The path to the .yml DFA specification file.
-    #[arg(required = true)]
-    file: PathBuf,
+    #[arg(long)]
+    file: Option<PathBuf>,
+
+    #[arg(long)]
+    regex: Option<String>,
 
     /// Generate a Graphviz DOT file for visualization.
     #[arg(long)]
@@ -37,7 +41,16 @@ fn main() {
 fn run_cli() -> Result<()> {
     let args = Args::parse();
 
-    let mut fsm = load_fsm(&args.file)?;
+    let mut fsm = if let Some(path) = &args.file {
+        load_fsm(path)?
+    } else if let Some(regex) = &args.regex {
+        let fsm = regex_parser::from_regex(regex)?;
+        fsm
+    } else {
+        return Err(anyhow::anyhow!(
+            "Either --file <path> or --regex <pattern> must be provided."
+        ));
+    };
     let mut current_path = args.file.clone();
 
     if args.table {
@@ -46,7 +59,12 @@ fn run_cli() -> Result<()> {
             Fsm::Nfa { dfa, .. } => dfa.print_transition_table(),
         }
     } else if args.viz {
-        run_viz(&fsm, &current_path)?;
+        let viz_path = if let Some(file) = &args.file {
+            file.clone()
+        } else {
+            PathBuf::from("regex_fsm")
+        };
+        run_viz(&fsm, &viz_path)?;
     } else {
         println!(
             "Loading DFA with {} states and {} transitions...",
@@ -82,19 +100,23 @@ fn run_cli() -> Result<()> {
                     match input {
                         "exit" | "quit" => break,
                         "reload" => {
-                            println!("Reloading '{}'...", current_path.display());
-                            match load_fsm(&current_path) {
-                                Ok(new_fsm) => {
-                                    fsm = new_fsm;
-                                    println!(
-                                        "FSM '{}' reloaded successfully.",
-                                        match &fsm {
-                                            Fsm::Dfa(dfa) => &dfa.name,
-                                            Fsm::Nfa { dfa, .. } => &dfa.name,
-                                        }
-                                    );
+                            if let Some(path) = &current_path {
+                                println!("Reloading '{}'...", path.display());
+                                match load_fsm(&path) {
+                                    Ok(new_fsm) => {
+                                        fsm = new_fsm;
+                                        println!(
+                                            "FSM '{}' reloaded successfully.",
+                                            match &fsm {
+                                                Fsm::Dfa(dfa) => &dfa.name,
+                                                Fsm::Nfa { dfa, .. } => &dfa.name,
+                                            }
+                                        );
+                                    }
+                                    Err(e) => eprintln!("Failed to reload: {}", e),
                                 }
-                                Err(e) => eprintln!("Failed to reload: {}", e),
+                            } else {
+                                eprintln!("No file to reload. Use 'load <file.yml>' first.");
                             }
                         }
                         _ if input.starts_with("load ") => {
@@ -104,7 +126,7 @@ fn run_cli() -> Result<()> {
                                 match load_fsm(&new_path) {
                                     Ok(new_fsm) => {
                                         fsm = new_fsm;
-                                        current_path = new_path;
+                                        current_path = Some(new_path);
                                         println!(
                                             "FSM '{}' loaded successfully.",
                                             match &fsm {
@@ -160,7 +182,7 @@ fn load_fsm(path: &Path) -> Result<Fsm> {
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    let fsm = fsm::parser::from_yaml(&contents)?;
+    let fsm = fsm::yaml_parser::from_yaml(&contents)?;
 
     Ok(fsm)
 }

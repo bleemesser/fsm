@@ -6,16 +6,17 @@ use serde::{
     de::{self, MapAccess, Visitor},
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque, hash_map::Entry},
     fmt,
+    hash::Hash,
 };
 
 /// Intermediate representation of an NFA for subset construction.
 #[derive(Debug, Clone)]
 pub struct Nfa {
-    /// Map from (from_state, on_char) to a set of destination states.
-    /// `on_char = None` represents an epsilon transition.
-    pub transitions: BTreeMap<(usize, Option<char>), BTreeSet<usize>>,
+    /// Vector of HashMaps, indexed by state. `on_char = None` is epsilon.
+    /// Each map points to a set of destination state indices.
+    pub transitions: Vec<HashMap<Option<char>, BTreeSet<usize>>>,
     pub start_state: usize,
     /// Set of original NFA state indices that are accepting.
     pub nfa_accept_states: BTreeSet<usize>,
@@ -37,7 +38,7 @@ impl Nfa {
         yaml_transitions: BTreeMap<String, Vec<YamlTransitionMapping>>,
         full_alphabet_set: &BTreeSet<char>,
     ) -> Result<Self> {
-        let mut transitions = BTreeMap::new();
+        let mut transitions = vec![HashMap::new(); state_bimap.len()];
         let mut nfa_accept_states = BTreeSet::new();
 
         for (i, info) in state_infos.iter().enumerate() {
@@ -53,15 +54,15 @@ impl Nfa {
 
                 match mapping.on.to_transition_trigger(full_alphabet_set)? {
                     TransitionTrigger::Epsilon => {
-                        transitions
-                            .entry((src_idx, None))
+                        transitions[src_idx]
+                            .entry(None)
                             .or_insert_with(BTreeSet::new)
                             .insert(dest_idx);
                     }
                     TransitionTrigger::Chars(chars) => {
                         for c in chars {
-                            transitions
-                                .entry((src_idx, Some(c)))
+                            transitions[src_idx]
+                                .entry(Some(c))
                                 .or_insert_with(BTreeSet::new)
                                 .insert(dest_idx);
                         }
@@ -79,7 +80,7 @@ impl Nfa {
     }
 
     /// Converts the NFA to an equivalent DFA using subset construction.
-    fn to_dfa(
+    pub fn to_dfa(
         self,
         name: &str,
         description: Option<String>,
@@ -94,15 +95,23 @@ impl Nfa {
             .collect();
 
         // set of NFA states to new DFA state index
-        let mut dfa_states: BTreeMap<BTreeSet<usize>, usize> = BTreeMap::new();
+        let mut dfa_states: HashMap<BTreeSet<usize>, usize> = HashMap::new();
         let mut worklist: VecDeque<BTreeSet<usize>> = VecDeque::new();
 
         let mut dfa_state_keys = BiMap::new();
         let mut dfa_state_properties = Vec::new();
         let mut dfa_accept_states = Vec::new();
-        let mut dfa_transitions = BTreeMap::new();
+        let mut dfa_transitions = HashMap::new();
 
-        let start_nfa_set = self.epsilon_closure(&BTreeSet::from([self.start_state]));
+        let num_nfa_states = self.nfa_state_keys.len();
+
+        // precompute epsilon closures for all NFA states
+        let mut epsilon_closures: Vec<BTreeSet<usize>> = Vec::with_capacity(num_nfa_states);
+        for i in 0..num_nfa_states {
+            epsilon_closures.push(self.epsilon_closure(&BTreeSet::from([i])));
+        }
+
+        let start_nfa_set = epsilon_closures[self.start_state].clone();
 
         let start_dfa_idx = 0;
         dfa_states.insert(start_nfa_set.clone(), start_dfa_idx);
@@ -113,22 +122,25 @@ impl Nfa {
 
             for (alpha_idx, &symbol) in alphabet.iter().enumerate() {
                 let directly_reachable_states = self.move_on_char(&current_nfa_set, symbol);
-                let target_nfa_set = self.epsilon_closure(&directly_reachable_states);
 
-                if target_nfa_set.is_empty() {
+                if directly_reachable_states.is_empty() {
                     continue;
                 }
 
-                // add to DFA or get existing index
-                let next_dfa_idx = if let Some(&idx) = dfa_states.get(&target_nfa_set) {
-                    idx
-                } else {
-                    let new_idx = dfa_states.len();
-                    dfa_states.insert(target_nfa_set.clone(), new_idx);
-                    worklist.push_back(target_nfa_set);
-                    new_idx
-                };
+                let mut target_nfa_set = BTreeSet::new();
+                for nfa_state in directly_reachable_states {
+                    target_nfa_set.extend(&epsilon_closures[nfa_state]);
+                }
 
+                let dfa_states_len = dfa_states.len();
+                let next_dfa_idx = match dfa_states.entry(target_nfa_set) {
+                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Vacant(entry) => {
+                        worklist.push_back(entry.key().clone());
+                        entry.insert(dfa_states_len);
+                        dfa_states_len
+                    }
+                };
                 dfa_transitions.insert((current_dfa_idx, alpha_idx), next_dfa_idx);
             }
         }
@@ -214,7 +226,7 @@ impl Nfa {
         let mut closure = states.clone();
         let mut worklist: Vec<usize> = states.iter().cloned().collect();
         while let Some(state) = worklist.pop() {
-            if let Some(epsilon_dests) = self.transitions.get(&(state, None)) {
+            if let Some(epsilon_dests) = self.transitions[state].get(&None) {
                 for &dest in epsilon_dests {
                     if closure.insert(dest) {
                         worklist.push(dest);
@@ -229,7 +241,7 @@ impl Nfa {
     fn move_on_char(&self, states: &BTreeSet<usize>, symbol: char) -> BTreeSet<usize> {
         let mut result = BTreeSet::new();
         for &state in states {
-            if let Some(dests) = self.transitions.get(&(state, Some(symbol))) {
+            if let Some(dests) = self.transitions[state].get(&Some(symbol)) {
                 result.extend(dests);
             }
         }
