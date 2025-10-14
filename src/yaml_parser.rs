@@ -104,24 +104,14 @@ impl Nfa {
         let mut dfa_transitions = HashMap::new();
 
         let num_nfa_states = self.nfa_state_keys.len();
+        
+        // precompute epsilon closures for all NFA states
         let mut epsilon_closures: Vec<BTreeSet<usize>> = Vec::with_capacity(num_nfa_states);
         for i in 0..num_nfa_states {
             epsilon_closures.push(self.epsilon_closure(&BTreeSet::from([i])));
         }
 
-        fn get_epsilon_closure(
-            closures: &[BTreeSet<usize>],
-            states: &BTreeSet<usize>,
-        ) -> BTreeSet<usize> {
-            let mut result = BTreeSet::new();
-            for &s in states {
-                result.extend(closures[s].iter().cloned());
-            }
-            result
-        }
-
-        let start_nfa_set =
-            get_epsilon_closure(&epsilon_closures, &BTreeSet::from([self.start_state]));
+        let start_nfa_set = epsilon_closures[self.start_state].clone();
 
         let start_dfa_idx = 0;
         dfa_states.insert(start_nfa_set.clone(), start_dfa_idx);
@@ -132,24 +122,25 @@ impl Nfa {
 
             for (alpha_idx, &symbol) in alphabet.iter().enumerate() {
                 let directly_reachable_states = self.move_on_char(&current_nfa_set, symbol);
-                let target_nfa_set =
-                    get_epsilon_closure(&epsilon_closures, &directly_reachable_states);
-
-                if target_nfa_set.is_empty() {
+            
+                if directly_reachable_states.is_empty() {
                     continue;
                 }
 
-                // add to DFA or get existing index
+                let mut target_nfa_set = BTreeSet::new();
+                for nfa_state in directly_reachable_states {
+                    target_nfa_set.extend(&epsilon_closures[nfa_state]);
+                }
+                
                 let dfa_states_len = dfa_states.len();
                 let next_dfa_idx = match dfa_states.entry(target_nfa_set) {
-                    Entry::Occupied(e) => *e.get(),
-                    Entry::Vacant(e) => {
-                        worklist.push_back(e.key().clone());
-                        e.insert(dfa_states_len);
+                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Vacant(entry) => {
+                        worklist.push_back(entry.key().clone());
+                        entry.insert(dfa_states_len);
                         dfa_states_len
                     }
                 };
-
                 dfa_transitions.insert((current_dfa_idx, alpha_idx), next_dfa_idx);
             }
         }
