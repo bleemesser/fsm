@@ -1,5 +1,5 @@
 use crate::dfa::Dfa;
-use crate::parser::Nfa;
+use crate::yaml_parser::Nfa;
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;

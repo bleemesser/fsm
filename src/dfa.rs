@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bimap::BiMap;
 
-use crate::parser::{self, Fsm};
+use crate::yaml_parser::{self, Fsm};
 
 #[derive(Debug, Clone)]
 pub struct StateInfo {
@@ -30,7 +30,7 @@ pub struct Dfa {
 impl Dfa {
     /// Parses a DFA from a YAML string specification.
     pub fn from_yaml(yaml_content: &str) -> Result<Fsm> {
-        parser::from_yaml(yaml_content)
+        yaml_parser::from_yaml(yaml_content)
     }
 
     /// Runs the DFA on the given input string and returns true if accepted, false otherwise.

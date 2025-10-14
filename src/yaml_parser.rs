@@ -79,7 +79,7 @@ impl Nfa {
     }
 
     /// Converts the NFA to an equivalent DFA using subset construction.
-    fn to_dfa(
+    pub fn to_dfa(
         self,
         name: &str,
         description: Option<String>,
